@@ -1,0 +1,40 @@
+# Entornos Virtuales y Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+.venv/
+env/
+*.conda
+
+# Modelos y Pesos de YOLO
+*.pt
+*.pth
+*.weights
+*.onnx
+*.engine
+
+# Datasets, Imágenes y Recortes
+/data/
+/dataset/
+/dataset_canonical/
+/dataset_pose/
+/dataset_pose_final/
+/crops_for_keypoints/
+
+# Resultados Generados, Logs y Ejecuciones
+/runs/
+/training_runs/
+/visualizations/
+/auto_tagged_labels/
+
+# Reportes y Archivos de Auditoría (Auto-generados)
+*.csv
+audit_report.txt
+
+# Entornos de desarrollo y SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
