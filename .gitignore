@@ -19,6 +19,7 @@ env/
 /data/
 /dataset/
 /dataset_canonical/
+/dataset_canonical_backup_*/
 /dataset_pose/
 /dataset_pose_final/
 /crops_for_keypoints/
