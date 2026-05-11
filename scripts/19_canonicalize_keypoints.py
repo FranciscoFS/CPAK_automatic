@@ -4,12 +4,9 @@ import shutil
 from pathlib import Path
 
 # Configuración
-CROP_DIR = Path("D:/Proyectos/TeleRx/crops_for_keypoints")
-CANONICAL_DIR = Path("D:/Proyectos/TeleRx/dataset_canonical")
-
-# Índices para intercambiar (Medial <-> Lateral)
-# 0: Cabeza, 1: Espina, 2: Talo, 3: Medial, 4: Lateral, 5: PlatMed, 6: PlatLat, 7: Notch
-FLIP_MAP = {0: 0, 1: 1, 2: 2, 3: 4, 4: 3, 5: 6, 6: 5, 7: 7}
+BASE_DIR = Path(__file__).resolve().parents[1]
+CROP_DIR = BASE_DIR / "crops_for_keypoints"
+CANONICAL_DIR = BASE_DIR / "dataset_canonical"
 
 def canonicalize():
     os.makedirs(CANONICAL_DIR, exist_ok=True)
@@ -60,9 +57,9 @@ def canonicalize():
                 y = float(kpts[i*3+1])
                 v = int(kpts[i*3+2])
                 
-                # Reflejar y mapear indice
+                # Reflejar todos los puntos manteniendo su índice anatómico.
                 new_x = 1.0 - x
-                new_idx = FLIP_MAP[i]
+                new_idx = i
                 new_kpts[new_idx*3] = new_x
                 new_kpts[new_idx*3+1] = y
                 new_kpts[new_idx*3+2] = v

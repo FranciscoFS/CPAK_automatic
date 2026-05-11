@@ -2,7 +2,8 @@ import csv
 from pathlib import Path
 
 # Configuración
-BENCHMARK_FILE = Path("D:/Proyectos/TeleRx/benchmark_results.csv")
+BASE_DIR = Path(__file__).resolve().parents[1]
+BENCHMARK_FILE = BASE_DIR / "benchmark_results.csv"
 
 def evaluate_knees_only():
     if not BENCHMARK_FILE.exists():

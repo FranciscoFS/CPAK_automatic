@@ -5,9 +5,9 @@ from pathlib import Path
 import yaml
 
 # Configuración de rutas
-BASE_DIR = Path("D:/Proyectos/TeleRx")
-SOURCE_IMG_DIR = BASE_DIR / "CPAK.yolo26/train/images"
-SOURCE_LBL_DIR = BASE_DIR / "CPAK.yolo26/train/labels"
+BASE_DIR = Path(__file__).resolve().parents[1]
+SOURCE_IMG_DIR = BASE_DIR / "data" / "images"
+SOURCE_LBL_DIR = BASE_DIR / "data" / "labels"
 DEST_ROOT = BASE_DIR / "dataset"
 
 # Proporciones

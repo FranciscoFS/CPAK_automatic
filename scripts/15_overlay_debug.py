@@ -4,10 +4,11 @@ from pathlib import Path
 from ultralytics import YOLO
 
 # Configuración
-MODEL_PATH = "D:/Proyectos/TeleRx/training_runs/telerx_pose_v2/weights/best.pt"
-VAL_DIR = Path("D:/Proyectos/TeleRx/dataset_pose/val/images")
-LBL_DIR = Path("D:/Proyectos/TeleRx/dataset_pose/val/labels")
-OUTPUT_DIR = Path("D:/Proyectos/TeleRx/visualizations/overlay_debug_v2")
+BASE_DIR = Path(__file__).resolve().parents[1]
+MODEL_PATH = str(BASE_DIR / "training_runs" / "telerx_pose_s_rebuild1_ft_full_b16_flipfix" / "weights" / "best.pt")
+VAL_DIR = BASE_DIR / "dataset_pose_final" / "val" / "images"
+LBL_DIR = BASE_DIR / "dataset_pose_final" / "val" / "labels"
+OUTPUT_DIR = BASE_DIR / "visualizations" / "overlay_debug_v2"
 
 # Definición de qué puntos dibujar según la clase (Filtro Clínico)
 JOINT_VISIBILITY = {

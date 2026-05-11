@@ -3,9 +3,12 @@ from pathlib import Path
 from ultralytics import YOLO
 
 # Configuración
-MODEL_PATH = "D:/Proyectos/TeleRx/training_runs/telerx_pose_v1/weights/best.pt"
-VAL_DIR = Path("D:/Proyectos/TeleRx/dataset_pose/val/images")
-OUTPUT_DIR = Path("D:/Proyectos/TeleRx/visualizations/knee_pose")
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+MODEL_PATH = str(BASE_DIR / "training_runs" / "telerx_pose_s_rebuild1_ft_full_b16_flipfix" / "weights" / "best.pt")
+VAL_DIR = BASE_DIR / "dataset_pose_final" / "val" / "images"
+OUTPUT_DIR = BASE_DIR / "visualizations" / "knee_pose"
 
 def save_knee_visuals():
     if not os.path.exists(MODEL_PATH):

@@ -3,10 +3,11 @@ from pathlib import Path
 from ultralytics import YOLO
 
 # Configuración
-MODEL_PATH = "D:/Proyectos/TeleRx/training_runs/telerx_yolov8n/weights/best.pt"
-RAW_DATA_DIR = Path("D:/Proyectos/TeleRx/data")
-DATASET_DIR = Path("D:/Proyectos/TeleRx/dataset")
-OUTPUT_LBL_DIR = Path("D:/Proyectos/TeleRx/auto_tagged_labels")
+BASE_DIR = Path(__file__).resolve().parents[1]
+MODEL_PATH = str(BASE_DIR / "training_runs" / "telerx_yolov8n" / "weights" / "best.pt")
+RAW_DATA_DIR = BASE_DIR / "data"
+DATASET_DIR = BASE_DIR / "dataset"
+OUTPUT_LBL_DIR = BASE_DIR / "auto_tagged_labels"
 
 # Umbrales
 CONF_THRESHOLD = 0.20  # Muy sensible para capturar todo

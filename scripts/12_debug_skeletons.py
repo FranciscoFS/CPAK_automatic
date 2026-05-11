@@ -3,8 +3,9 @@ import os
 from pathlib import Path
 
 # Configuración
-CROP_DIR = Path("D:/Proyectos/TeleRx/crops_for_keypoints")
-OUTPUT_DIR = Path("D:/Proyectos/TeleRx/visualizations/skeleton_debug")
+BASE_DIR = Path(__file__).resolve().parents[1]
+CROP_DIR = BASE_DIR / "crops_for_keypoints"
+OUTPUT_DIR = BASE_DIR / "visualizations" / "skeleton_debug"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Esqueleto completo (8 puntos)

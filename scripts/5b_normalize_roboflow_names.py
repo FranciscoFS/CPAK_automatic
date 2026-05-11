@@ -3,7 +3,8 @@ import re
 from pathlib import Path
 
 # Configuración
-DATASET_ROOT = Path("D:/Proyectos/TeleRx/dataset")
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATASET_ROOT = BASE_DIR / "dataset"
 SUBDIRS = ['train', 'val', 'test']
 FOLDERS = ['images', 'labels']
 

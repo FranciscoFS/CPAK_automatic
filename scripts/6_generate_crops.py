@@ -3,11 +3,12 @@ import cv2
 from pathlib import Path
 
 # Configuración de Rutas
-RAW_DATA_DIR = Path("D:/Proyectos/TeleRx/data")
-AUTO_LBL_DIR = Path("D:/Proyectos/TeleRx/auto_tagged_labels") 
-DATASET_ROOT = Path("D:/Proyectos/TeleRx/dataset")
+BASE_DIR = Path(__file__).resolve().parents[1]
+RAW_DATA_DIR = BASE_DIR / "data"
+AUTO_LBL_DIR = BASE_DIR / "auto_tagged_labels"
+DATASET_ROOT = BASE_DIR / "dataset"
 SUBDIRS = ['train', 'val', 'test']
-OUTPUT_DIR = Path("D:/Proyectos/TeleRx/crops_for_keypoints")
+OUTPUT_DIR = BASE_DIR / "crops_for_keypoints"
 
 CLASS_NAMES = ['Cadera_Der', 'Cadera_Izq', 'Rodilla_Der', 'Rodilla_Izq', 'Tobillo_Der', 'Tobillo_Izq']
 

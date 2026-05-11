@@ -1,0 +1,7 @@
+Knee keypoint drift audit
+total_rows=169
+ok_rows=169
+no_prediction_rows=0
+avg_mean_err_px=76.458
+condyles_swap_likely_count=162
+plateaus_swap_likely_count=132

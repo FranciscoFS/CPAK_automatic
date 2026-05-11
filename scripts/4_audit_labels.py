@@ -1,20 +1,14 @@
 import os
-from pathlib import Path
-from collections import Counter
-
-# Configuración
-LBL_DIR = Path("D:/Proyectos/TeleRx/auto_tagged_labels")
-CLASS_NAMES = ['Cadera Der', 'Cadera IZq', 'Rodilla Der', 'Rodilla Izq', 'Tobillo DEr', 'Tobillo Izq']
-
-import os
 import csv
 from pathlib import Path
 from collections import Counter
 
 # Configuración
-LBL_DIR = Path("D:/Proyectos/TeleRx/auto_tagged_labels")
-CLASS_NAMES = ['Cadera Der', 'Cadera IZq', 'Rodilla Der', 'Rodilla Izq', 'Tobillo DEr', 'Tobillo Izq']
-CSV_OUTPUT = Path("D:/Proyectos/TeleRx/consolidated_audit.csv")
+BASE_DIR = Path(__file__).resolve().parents[1]
+LBL_DIR = BASE_DIR / "auto_tagged_labels"
+CSV_OUTPUT = BASE_DIR / "consolidated_audit.csv"
+AUDIT_REPORT = BASE_DIR / "audit_report.txt"
+CLASS_NAMES = ['Cadera Der', 'Cadera Izq', 'Rodilla Der', 'Rodilla Izq', 'Tobillo Der', 'Tobillo Izq']
 
 def audit_labels():
     if not LBL_DIR.exists():
@@ -86,7 +80,7 @@ def audit_labels():
         print(f"  - Generadas por Simetría (S): {stats_origins['S']} ({s_pct:.1f}%)")
 
     print(f"\n¡CSV consolidado generado en: {CSV_OUTPUT}")
-    print(f"Reporte de texto generado en: D:/Proyectos/TeleRx/audit_report.txt")
+    print(f"Reporte de texto generado en: {AUDIT_REPORT}")
 
     if incomplete_images:
         print("\n--- Imágenes Incompletas (menos de 6 etiquetas) ---")
@@ -98,13 +92,13 @@ def audit_labels():
             print(f"  ... y {len(incomplete_images) - 20} imágenes más.")
 
     # Guardar reporte en un TXT para el usuario
-    with open("D:/Proyectos/TeleRx/audit_report.txt", "w") as r:
+    with open(AUDIT_REPORT, "w") as r:
         r.write(f"Reporte de Auditoría TeleRx\n")
         r.write(f"Total imágenes: {total_files}\n\n")
         for name, count, missing in incomplete_images:
             r.write(f"{name}: {count}/6 - Faltan: {', '.join(missing)}\n")
 
-    print(f"\nReporte detallado guardado en: D:/Proyectos/TeleRx/audit_report.txt")
+    print(f"\nReporte detallado guardado en: {AUDIT_REPORT}")
 
 if __name__ == "__main__":
     audit_labels()

@@ -3,7 +3,8 @@ import cv2
 from pathlib import Path
 
 # Configuración
-DATASET_DIR = Path("D:/Proyectos/TeleRx/dataset_pose")
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATASET_DIR = BASE_DIR / "dataset_pose_final"
 # Índices del esqueleto para intercambiar al hacer mirror (Medial <-> Lateral)
 # Indices: 0:Centro, 1:Espina, 2:Talo, 3:CondMed, 4:CondLat, 5:PlatMed, 6:PlatLat, 7:Notch
 FLIP_MAP = {0: 0, 1: 1, 2: 2, 3: 4, 4: 3, 5: 6, 6: 5, 7: 7}

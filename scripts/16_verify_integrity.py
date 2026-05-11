@@ -2,8 +2,9 @@ import os
 from pathlib import Path
 
 # Configuración
-ORIGINAL_DATA_DIR = Path("D:/Proyectos/TeleRx/dataset") # Carpeta original con etiquetas manuales
-CANONICAL_DIR = Path("D:/Proyectos/TeleRx/dataset_pose") # Carpeta después de Script 12
+BASE_DIR = Path(__file__).resolve().parents[1]
+ORIGINAL_DATA_DIR = BASE_DIR / "dataset"
+CANONICAL_DIR = BASE_DIR / "dataset_pose_final"
 
 def verify_integrity():
     # Buscamos un par de archivos para comparar si la "lógica de lado" se mantiene

@@ -1,13 +1,15 @@
 from ultralytics import YOLO
 import os
+from pathlib import Path
 
 # Configuración
-DATA_YAML = "D:/Proyectos/TeleRx/dataset_pose_final/data.yaml"
-# Partimos de 0 con el modelo Nano de YOLO26
-MODEL_NAME = "yolo26n-pose.pt" 
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATA_YAML = str(BASE_DIR / "dataset_pose_final" / "data.yaml")
+# Entrenamiento desde cero con modelo small de YOLO26 Pose.
+MODEL_NAME = str(BASE_DIR / "yolo26s-pose.pt")
 EPOCHS = 100
 IMG_SIZE = 800 
-BATCH_SIZE = 4 
+BATCH_SIZE = 8 
 
 def train_pose_model():
     print(f"Entrenando modelo de Pose desde cero: {MODEL_NAME}...")
@@ -22,8 +24,8 @@ def train_pose_model():
         imgsz=IMG_SIZE,
         batch=BATCH_SIZE,
         device=0,
-        project="D:/Proyectos/TeleRx/training_runs",
-        name="telerx_pose_from_scratch", 
+        project=str(BASE_DIR / "training_runs"),
+        name="telerx_pose_s_rebuild1",
         exist_ok=True,
         # Aumentaciones explicitas
         fliplr=0.5,        # Habilita el uso del flip_idx que definimos
@@ -38,5 +40,5 @@ def train_pose_model():
     print(f"Mejor modelo guardado en: {results.save_dir}/weights/best.pt")
 
 if __name__ == "__main__":
-    os.makedirs("D:/Proyectos/TeleRx/training_runs", exist_ok=True)
+    os.makedirs(BASE_DIR / "training_runs", exist_ok=True)
     train_pose_model()

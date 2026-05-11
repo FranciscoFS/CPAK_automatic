@@ -2,8 +2,9 @@ import os
 from pathlib import Path
 
 # Configuración
-CROP_DIR = Path("D:/Proyectos/TeleRx/crops_for_keypoints")
-POSE_DIR = Path("D:/Proyectos/TeleRx/dataset_pose")
+BASE_DIR = Path(__file__).resolve().parents[1]
+CROP_DIR = BASE_DIR / "crops_for_keypoints"
+POSE_DIR = BASE_DIR / "dataset_pose_final"
 
 def audit_consistency():
     # Encontrar algunos archivos de rodilla en el dataset pose
