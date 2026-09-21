@@ -9,8 +9,8 @@ from ultralytics import YOLO
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_DET_MODEL = BASE_DIR / "training_runs" / "telerx_yolov8n" / "weights" / "best.pt"
-DEFAULT_POSE_MODEL = BASE_DIR / "training_runs" / "telerx_pose_s_rebuild1_ft_full_b16_flipfix" / "weights" / "best.pt"
+DEFAULT_DET_MODEL = BASE_DIR / "training_runs" / "telerx_yolo26s_768_b12-4" / "weights" / "best.pt"
+DEFAULT_POSE_MODEL = BASE_DIR / "training_runs" / "telerx_pose_v2_ft" / "weights" / "best.pt"
 DEFAULT_OUTPUT_DIR = BASE_DIR / "visualizations" / "final_pipeline"
 
 CLASS_INFO = {
@@ -59,6 +59,7 @@ def parse_args():
     parser.add_argument("--det-conf", type=float, default=0.20, help="Confianza minima para deteccion de zonas.")
     parser.add_argument("--pose-conf", type=float, default=0.20, help="Confianza minima para pose sobre cada crop.")
     parser.add_argument("--padding", type=float, default=0.15, help="Padding extra alrededor de cada bounding box.")
+    parser.add_argument("--json-only", action="store_true", help="Guardar solo JSON y omitir overlays.")
     return parser.parse_args()
 
 
@@ -91,6 +92,232 @@ def pick_best_detections(result):
                 "side": CLASS_INFO.get(cls_id, {}).get("side", "NA"),
             }
     return best
+
+
+def bbox_iou_xyxy(box_a, box_b):
+    ax1, ay1, ax2, ay2 = box_a
+    bx1, by1, bx2, by2 = box_b
+
+    ix1 = max(ax1, bx1)
+    iy1 = max(ay1, by1)
+    ix2 = min(ax2, bx2)
+    iy2 = min(ay2, by2)
+
+    iw = max(0.0, ix2 - ix1)
+    ih = max(0.0, iy2 - iy1)
+    inter = iw * ih
+
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    if union <= 0:
+        return 0.0
+    return inter / union
+
+
+def validate_side_coherence(detections):
+    """
+    Valida y corrige asignaciones Der/Izq usando posición X espacial.
+
+    Convención del dataset: Der tiene menor X (lado izquierdo de la imagen),
+    Izq tiene mayor X (lado derecho de la imagen), convención radiológica estándar.
+
+    Estrategia:
+    1. Buscar "anclas": articulaciones donde se detectaron AMBOS lados.
+       Estas dan la referencia real de Der_x vs Izq_x en esta imagen.
+    2. Calcular el punto medio entre Der y Izq usando las anclas.
+    3. Verificar CADA detección: si su X está claramente del lado equivocado
+       (más allá de un margen del 10% del span), corregir el lado.
+
+    Si no hay anclas (ej: solo se detectó un lado), retorna sin cambios.
+    """
+    if not detections:
+        return detections
+
+    # Paso 0: ordenar por posición dentro de cada articulación (izquierda->Der, derecha->Izq).
+    by_joint_keys = {}
+    for key, det in detections.items():
+        by_joint_keys.setdefault(det["joint"], []).append(key)
+
+    for joint, keys in by_joint_keys.items():
+        if len(keys) < 2:
+            continue
+        keys_sorted = sorted(keys, key=lambda k: (detections[k]["xyxy"][0] + detections[k]["xyxy"][2]) / 2)
+        left_key = keys_sorted[0]
+        right_key = keys_sorted[-1]
+        if detections[left_key]["side"] != "Der":
+            print(f"  [Orden-X] {joint} {detections[left_key]['side']}→Der")
+            detections[left_key]["side"] = "Der"
+        if detections[right_key]["side"] != "Izq":
+            print(f"  [Orden-X] {joint} {detections[right_key]['side']}→Izq")
+            detections[right_key]["side"] = "Izq"
+
+    # Paso 1: calcular anclas globales (preferencia Cadera/Tobillo por estabilidad).
+    preferred_joints = ["Cadera", "Tobillo"]
+
+    def collect_anchors(joints_subset=None):
+        der_xs, izq_xs = [], []
+        for joint, keys in by_joint_keys.items():
+            if joints_subset is not None and joint not in joints_subset:
+                continue
+            side_map = {}
+            for key in keys:
+                det = detections.get(key)
+                if det is None:
+                    continue
+                if det["side"] not in ("Der", "Izq"):
+                    continue
+                xc = (det["xyxy"][0] + det["xyxy"][2]) / 2
+                side_map[det["side"]] = xc
+            if "Der" in side_map and "Izq" in side_map:
+                der_xs.append(side_map["Der"])
+                izq_xs.append(side_map["Izq"])
+        return der_xs, izq_xs
+
+    der_anchor_xs, izq_anchor_xs = collect_anchors(preferred_joints)
+    if not der_anchor_xs:
+        der_anchor_xs, izq_anchor_xs = collect_anchors()
+    if not der_anchor_xs:
+        return detections
+
+    der_x_ref = float(np.median(der_anchor_xs))
+    izq_x_ref = float(np.median(izq_anchor_xs))
+    midpoint = (der_x_ref + izq_x_ref) / 2
+    span = abs(der_x_ref - izq_x_ref)
+    margin = max(8.0, span * 0.10)
+
+    # Paso 2: coherencia global por eje X contra midpoint.
+    for key, det in detections.items():
+        if det["side"] not in ("Der", "Izq"):
+            continue
+
+        xc = (det["xyxy"][0] + det["xyxy"][2]) / 2
+        expected = "Der" if xc < midpoint else "Izq"
+        if expected != det["side"] and abs(xc - midpoint) > margin:
+            old_side = det["side"]
+            det["side"] = expected
+            print(
+                f"  [Coherencia-X] {det['joint']} cls{det['class_id']} "
+                f"{old_side}→{expected} (x={xc:.0f}, mid={midpoint:.0f})"
+            )
+
+    # Paso 3: resolver duplicados por superposición extrema en la misma mitad.
+    to_delete = set()
+    for joint, keys in by_joint_keys.items():
+        active = [k for k in keys if k in detections]
+        if len(active) < 2:
+            continue
+        a, b = active[0], active[1]
+        det_a = detections[a]
+        det_b = detections[b]
+        xa = (det_a["xyxy"][0] + det_a["xyxy"][2]) / 2
+        xb = (det_b["xyxy"][0] + det_b["xyxy"][2]) / 2
+        expected_a = "Der" if xa < midpoint else "Izq"
+        expected_b = "Der" if xb < midpoint else "Izq"
+        iou = bbox_iou_xyxy(det_a["xyxy"], det_b["xyxy"])
+        if iou > 0.70 and expected_a == expected_b:
+            drop_key, keep_key = (a, b) if det_a["confidence"] <= det_b["confidence"] else (b, a)
+            to_delete.add(drop_key)
+            detections[keep_key]["side"] = expected_a
+            print(
+                f"  [Conflicto-IoU] {joint} IoU={iou:.2f} ambos->{expected_a}; "
+                f"mantener cls{detections[keep_key]['class_id']} descartar cls{detections[drop_key]['class_id']}"
+            )
+
+    for key in to_delete:
+        detections.pop(key, None)
+
+    # Paso 4: garantizar una sola detección por (joint, side), quedándose con mayor confianza.
+    best_by_joint_side = {}
+    for key, det in detections.items():
+        joint_side = (det["joint"], det["side"])
+        best_key = best_by_joint_side.get(joint_side)
+        if best_key is None or det["confidence"] > detections[best_key]["confidence"]:
+            best_by_joint_side[joint_side] = key
+
+    keep_keys = set(best_by_joint_side.values())
+    for key in list(detections.keys()):
+        if key not in keep_keys:
+            detections.pop(key, None)
+
+    return detections
+
+
+def reflect_missing_detections(detections: dict, image_width: int):
+    """
+    Refleja bboxes contralaterales si falta detección en un lado.
+    
+    Si Der tiene Rodilla pero Izq no, espeja el bbox de Rodilla_Der → Rodilla_Izq.
+    
+    Args:
+        detections: dict de cls_id → {confidence, xyxy, joint, side, ...}
+        image_width: ancho de la imagen para calcular la reflexión
+    
+    Returns:
+        detections con detecciones reflejadas añadidas (si es posible)
+    """
+    if not detections:
+        return detections
+    
+    joints_by_side = {"Der": set(), "Izq": set()}
+    for det in detections.values():
+        side = det["side"]
+        joint = det["joint"]
+        if side in joints_by_side:
+            joints_by_side[side].add(joint)
+    
+    # Identificar qué articulaciones faltan en cada lado
+    all_joints = joints_by_side["Der"] | joints_by_side["Izq"]
+    missing_in_izq = all_joints - joints_by_side["Izq"]
+    missing_in_der = all_joints - joints_by_side["Der"]
+    
+    reflected = {}
+    next_cls_id = max(detections.keys()) + 1 if detections else 0
+    
+    # Reflejar articulaciones faltantes en Izq desde Der
+    for joint in missing_in_izq:
+        for det in detections.values():
+            if det["joint"] == joint and det["side"] == "Der":
+                x1, y1, x2, y2 = det["xyxy"]
+                # Reflexión horizontal: x' = width - x
+                x1_reflected = image_width - x2
+                x2_reflected = image_width - x1
+                
+                reflected[next_cls_id] = {
+                    "class_id": next_cls_id,
+                    "confidence": det["confidence"] * 0.95,  # Penalizar ligeramente
+                    "xyxy": [x1_reflected, y1, x2_reflected, y2],
+                    "joint": joint,
+                    "side": "Izq",
+                    "reflected": True,
+                }
+                print(f"  [Reflexión] {joint} Der → Izq (clase {next_cls_id}, conf {reflected[next_cls_id]['confidence']:.3f})")
+                next_cls_id += 1
+                break
+    
+    # Reflejar articulaciones faltantes en Der desde Izq
+    for joint in missing_in_der:
+        for det in detections.values():
+            if det["joint"] == joint and det["side"] == "Izq":
+                x1, y1, x2, y2 = det["xyxy"]
+                # Reflexión horizontal
+                x1_reflected = image_width - x2
+                x2_reflected = image_width - x1
+                
+                reflected[next_cls_id] = {
+                    "class_id": next_cls_id,
+                    "confidence": det["confidence"] * 0.95,
+                    "xyxy": [x1_reflected, y1, x2_reflected, y2],
+                    "joint": joint,
+                    "side": "Der",
+                    "reflected": True,
+                }
+                print(f"  [Reflexión] {joint} Izq → Der (clase {next_cls_id}, conf {reflected[next_cls_id]['confidence']:.3f})")
+                next_cls_id += 1
+                break
+    
+    detections.update(reflected)
+    return detections
 
 
 def padded_box(xyxy, image_shape, padding):
@@ -225,6 +452,45 @@ def angle_at_vertex_deg(vertex, point_a, point_b):
     return math.degrees(math.acos(cosine))
 
 
+def perpendicular_distance_point_to_line(point, line_p1, line_p2):
+    """
+    Calcula la distancia perpendicular desde un punto a una línea definida por dos puntos.
+    
+    Fórmula: d = ||(p - p1) × (p2 - p1)|| / ||p2 - p1||
+    
+    Args:
+        point: (x, y) punto
+        line_p1: (x1, y1) primer punto de la línea
+        line_p2: (x2, y2) segundo punto de la línea
+    
+    Returns:
+        Distancia perpendicular (en píxeles, requiere pixel_spacing del DICOM para mm)
+    """
+    px, py = float(point[0]), float(point[1])
+    x1, y1 = float(line_p1[0]), float(line_p1[1])
+    x2, y2 = float(line_p2[0]), float(line_p2[1])
+    
+    # Vector de la línea
+    dx = x2 - x1
+    dy = y2 - y1
+    line_len_sq = dx * dx + dy * dy
+    
+    if line_len_sq < 1e-10:
+        # Línea degenerada (puntos muy cercanos)
+        return math.sqrt((px - x1) ** 2 + (py - y1) ** 2)
+    
+    # Proyección del punto sobre la línea
+    t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / line_len_sq))
+    
+    # Punto proyectado
+    proj_x = x1 + t * dx
+    proj_y = y1 + t * dy
+    
+    # Distancia perpendicular
+    dist = math.sqrt((px - proj_x) ** 2 + (py - proj_y) ** 2)
+    return dist
+
+
 def classify_ahka(value):
     if value < -2.0:
         return "Varo"
@@ -281,6 +547,23 @@ def calculate_metrics(points):
 
     ahka = mpta - ldfa
     jlo = mpta + ldfa
+
+    # HKA angular real (no aritmético): ángulo entre eje femoral P0->P7 y eje tibial P1->P2
+    hka = line_angle_deg(points[0], points[7], points[1], points[2])
+    if hka is None:
+        return {"status": "invalid_geometry"}
+    # Asignar signo según aHKA: negativo = varo, positivo = valgo
+    if ahka < 0:
+        hka = -hka
+    
+    # Línea de Mikulicz: desde P0 (Cabeza Femoral) a P2 (Centro Tobillo)
+    p0 = points[0]  # Cabeza Femoral
+    p2 = points[2]  # Centro Tobillo
+    p1 = points[1]  # Centro Rodilla (para MAD)
+    
+    # MAD: distancia perpendicular desde P1 a la línea Mikulicz (P0-P2)
+    mad_px = perpendicular_distance_point_to_line(p1, p0, p2)
+    
     return {
         "status": "ok",
         "LDFA": round(ldfa, 3),
@@ -288,6 +571,8 @@ def calculate_metrics(points):
         "LDFA_internal": round(ldfa_internal, 3),
         "LDFA_mode": "EXTERNAL_FIXED",
         "MPTA": round(mpta, 3),
+        "HKA": round(hka, 3),
+        "HKA_definition": "ANGULO_ENTRE_EJES_CON_SIGNO_NEGATIVO_VARO_POSITIVO_VALGO",
         "aHKA": round(ahka, 3),
         "aHKA_formula": AHKA_FORMULA,
         "JLO": round(jlo, 3),
@@ -295,6 +580,8 @@ def calculate_metrics(points):
         "JLO_class": classify_jlo(jlo),
         "CPAK": f"{classify_ahka(ahka)} | {classify_jlo(jlo)}",
         "CPAK_type": classify_cpak_type(classify_ahka(ahka), classify_jlo(jlo)),
+        "MAD_px": round(mad_px, 2),
+        "MAD_note": "Distancia perpendicular (píxeles) desde centro rodilla a línea Mikulicz. Requiere pixel_spacing del DICOM para convertir a mm.",
     }
 
 
@@ -382,11 +669,43 @@ def project_line_to_image(p1, p2, width: int, height: int):
     return p_start, p_end
 
 
-def draw_projected_line(canvas, p1, p2, color, thickness):
+def draw_simple_line(canvas, p1, p2, color, thickness):
+    """Dibuja una línea simple entre dos puntos sin extender."""
+    pt1 = (int(round(p1[0])), int(round(p1[1])))
+    pt2 = (int(round(p2[0])), int(round(p2[1])))
+    cv2.line(canvas, pt1, pt2, color, thickness, cv2.LINE_AA)
+
+
+def draw_projected_line(canvas, p1, p2, color, thickness, line_style: str = "solid"):
+    """
+    Dibuja una línea proyectada desde p1 a p2 hasta el borde de la imagen.
+    
+    Args:
+        line_style: "solid" o "dashed"
+    """
     projected = project_line_to_image(p1, p2, canvas.shape[1], canvas.shape[0])
     if projected is None:
         return
-    cv2.line(canvas, projected[0], projected[1], color, thickness, cv2.LINE_AA)
+    
+    if line_style == "dashed":
+        # Dibujar línea punteada
+        pt1, pt2 = projected[0], projected[1]
+        dx = pt2[0] - pt1[0]
+        dy = pt2[1] - pt1[1]
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 1:
+            return
+        
+        segments = int(length / 20)  # Segmentos de ~20 px
+        for i in range(0, segments, 2):
+            x1 = int(pt1[0] + (dx / segments) * i)
+            y1 = int(pt1[1] + (dy / segments) * i)
+            x2 = int(pt1[0] + (dx / segments) * (i + 1))
+            y2 = int(pt1[1] + (dy / segments) * (i + 1))
+            cv2.line(canvas, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+    else:
+        cv2.line(canvas, projected[0], projected[1], color, thickness, cv2.LINE_AA)
+
 
 
 def draw_extended_line(canvas, p1, p2, color, thickness, extend: float = 0.20):
@@ -430,19 +749,37 @@ def draw_detection_boxes(canvas, detections, style):
         )
 
 
-def draw_side_overlay(canvas, side: str, points, metrics, style, draw_axes: bool = True, draw_points: bool = True):
+def draw_side_overlay(canvas, side: str, points, metrics, style, draw_axes: bool = True, draw_points: bool = True, draw_mikulicz: bool = False):
     color = SIDE_COLORS.get(side, (255, 255, 255))
     point_radius = style["point_radius"]
 
     if draw_axes:
-        # Ejes largos: proyección completa hasta el borde de la imagen
+        # Ejes: solo de punto a punto (sin extender)
         for start, end in [(0, 7), (1, 2)]:
             if start in points and end in points:
-                draw_projected_line(canvas, points[start], points[end], color, style["line_thickness"])
-        # Cóndilos y platillos: solo 20% más allá de cada punto
+                draw_simple_line(canvas, points[start], points[end], color, style["line_thickness"])
+        # Cóndilos y platillos: solo 20% más allá de cada punto (rodilla)
         for start, end in [(3, 4), (5, 6)]:
             if start in points and end in points:
                 draw_extended_line(canvas, points[start], points[end], color, style["line_thickness"], extend=0.20)
+
+    # Línea de Mikulicz (P0 Cadera a P2 Tobillo) - punteada, de punto a punto
+    if draw_mikulicz and 0 in points and 2 in points:
+        mikulicz_color = (128, 128, 255)  # Azul pálido
+        # Dibuja la línea punteada manualmente punto a punto
+        pt1 = (int(round(points[0][0])), int(round(points[0][1])))
+        pt2 = (int(round(points[2][0])), int(round(points[2][1])))
+        dx = pt2[0] - pt1[0]
+        dy = pt2[1] - pt1[1]
+        length = math.sqrt(dx * dx + dy * dy)
+        if length > 1:
+            segments = int(length / 20)  # Segmentos de ~20 px
+            for i in range(0, segments, 2):
+                x1 = int(pt1[0] + (dx / segments) * i)
+                y1 = int(pt1[1] + (dy / segments) * i)
+                x2 = int(pt1[0] + (dx / segments) * (i + 1))
+                y2 = int(pt1[1] + (dy / segments) * (i + 1))
+                cv2.line(canvas, (x1, y1), (x2, y2), mikulicz_color, style["line_thickness"], cv2.LINE_AA)
 
     if draw_points:
         for idx, (px, py) in points.items():
@@ -461,13 +798,24 @@ def draw_side_overlay(canvas, side: str, points, metrics, style, draw_axes: bool
             )
 
 
-def render_overlay_from_payload(image_path: Path, payload: dict, draw_boxes: bool = True, draw_axes: bool = True):
+
+
+def render_overlay_from_payload(
+    image_path: Path,
+    payload: dict,
+    draw_boxes: bool = True,
+    draw_axes: bool = True,
+    draw_mikulicz: bool = False,
+    line_thickness_override: int = None,
+):
     image = cv2.imread(str(image_path))
     if image is None:
         raise RuntimeError(f"No se pudo leer la imagen para render: {image_path}")
 
     canvas = image.copy()
     style = get_overlay_style(canvas)
+    if line_thickness_override is not None:
+        style["line_thickness"] = max(1, int(line_thickness_override))
 
     detections = {}
     for cls_id_str, det in payload.get("detections", {}).items():
@@ -488,7 +836,7 @@ def render_overlay_from_payload(image_path: Path, payload: dict, draw_boxes: boo
             for idx, vals in side_info.get("points", {}).items()
         }
         metrics = side_info.get("metrics", {})
-        draw_side_overlay(canvas, side_name, points, metrics, style, draw_axes=draw_axes, draw_points=True)
+        draw_side_overlay(canvas, side_name, points, metrics, style, draw_axes=draw_axes, draw_points=True, draw_mikulicz=draw_mikulicz)
 
     return canvas
 
@@ -501,8 +849,10 @@ def process_image(
     det_conf: float,
     pose_conf: float,
     padding: float,
+    json_only: bool = False,
     draw_boxes: bool = True,
     draw_axes: bool = True,
+    draw_mikulicz: bool = False,
 ):
     image = cv2.imread(str(image_path))
     if image is None:
@@ -510,6 +860,11 @@ def process_image(
 
     det_result = det_model.predict(source=str(image_path), conf=det_conf, verbose=False)[0]
     detections = pick_best_detections(det_result)
+    detections = validate_side_coherence(detections)
+    
+    # Reflexionar bboxes contralaterales si faltan articulaciones
+    image_width = image.shape[1]
+    detections = reflect_missing_detections(detections, image_width)
 
     sides = {"Der": {}, "Izq": {}}
     for det in detections.values():
@@ -523,6 +878,7 @@ def process_image(
             "side": det["side"],
             "confidence": round(det["confidence"], 4),
             "xyxy": [round(v, 2) for v in det["xyxy"]],
+            "reflected": det.get("reflected", False),
         }
 
     for side_name, side_detections in sides.items():
@@ -535,12 +891,22 @@ def process_image(
             "metrics": metrics,
         }
 
-    canvas = render_overlay_from_payload(image_path, result_payload, draw_boxes=draw_boxes, draw_axes=draw_axes)
+    canvas = None
+    if not json_only:
+        canvas = render_overlay_from_payload(
+            image_path,
+            result_payload,
+            draw_boxes=draw_boxes,
+            draw_axes=draw_axes,
+            draw_mikulicz=draw_mikulicz,
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    overlay_path = output_dir / f"{image_path.stem}_final_overlay.jpg"
     json_path = output_dir / f"{image_path.stem}_final_metrics.json"
-    cv2.imwrite(str(overlay_path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    overlay_path = None
+    if canvas is not None:
+        overlay_path = output_dir / f"{image_path.stem}_final_overlay.jpg"
+        cv2.imwrite(str(overlay_path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 92])
     json_path.write_text(json.dumps(result_payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return overlay_path, json_path, result_payload
 
@@ -576,16 +942,18 @@ def main():
             det_conf=args.det_conf,
             pose_conf=args.pose_conf,
             padding=args.padding,
+            json_only=args.json_only,
         )
         print(f"\nProcesada: {image_path.name}")
-        print(f"  Overlay: {overlay_path}")
+        if overlay_path is not None:
+            print(f"  Overlay: {overlay_path}")
         print(f"  JSON: {json_path}")
         for side_name, side_info in payload["sides"].items():
             metrics = side_info["metrics"]
             if metrics.get("status") == "ok":
                 print(
                     f"  {side_name}: LDFA={metrics['LDFA']:.2f} MPTA={metrics['MPTA']:.2f} "
-                    f"aHKA={metrics['aHKA']:.2f} JLO={metrics['JLO']:.2f} | {metrics['CPAK']}"
+                    f"HKA={metrics['HKA']:.2f} aHKA={metrics['aHKA']:.2f} JLO={metrics['JLO']:.2f} | {metrics['CPAK']}"
                 )
             else:
                 print(f"  {side_name}: sin calculo completo ({metrics})")

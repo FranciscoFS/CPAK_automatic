@@ -12,8 +12,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BATCH_DIR = ROOT / "visualizations" / "final_pipeline_data_batch"
-OUT_CSV = ROOT / "reports" / "incomplete_cases_review.csv"
+BATCH_DIR = ROOT / "outputs_data_json_batch_v2"
+OUT_CSV = ROOT / "reports" / "incomplete_cases_review_v2.csv"
 
 json_files = sorted(BATCH_DIR.glob("*_final_metrics.json"))
 

@@ -15,8 +15,8 @@ from matplotlib.lines import Line2D
 
 # ── Rutas ───────────────────────────────────────────────────────────────────
 ROOT       = Path(__file__).resolve().parents[1]
-BATCH_DIR  = ROOT / "visualizations" / "final_pipeline_data_batch"
-OUT_FILE   = ROOT / "reports" / "scatter_jlo_vs_ahka.png"
+BATCH_DIR  = ROOT / "outputs_data_json_batch_v2"
+OUT_FILE   = ROOT / "reports" / "scatter_jlo_vs_ahka_v2.png"
 OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 # ── Límites CPAK ────────────────────────────────────────────────────────────

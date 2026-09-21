@@ -12,25 +12,19 @@ def run_test_inference():
     if not os.path.exists(MODEL_PATH):
         print(f"No se encontró el modelo en {MODEL_PATH}")
         return
-        
     model = YOLO(MODEL_PATH)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
-    # Elegir 5 imágenes aleatorias del set de validación
     all_images = [f for f in os.listdir(VAL_DIR) if f.endswith(('.jpg', '.png'))]
     selected = random.sample(all_images, min(len(all_images), 5))
-    
     print(f"Probando el modelo v2 en: {selected}")
-    
     for img_name in selected:
-        # Inferencia con visualización de keypoints
         model.predict(
             source=VAL_DIR / img_name,
             save=True,
             project=str(OUTPUT_DIR),
             name=".",
             exist_ok=True,
-            conf=0.25 # Umbral estándar
+            conf=0.25
         )
         print(f"Predicción guardada para: {img_name}")
 

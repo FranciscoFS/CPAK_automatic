@@ -1,12 +1,12 @@
 """
 Resumen de inferencia batch sobre carpeta data/.
-Lee todos los JSON en visualizations/final_pipeline_data_batch/ y produce estadísticas.
+Lee todos los JSON en outputs_data_json_batch_v2/ y produce estadísticas.
 """
 import json
 from pathlib import Path
 from collections import defaultdict, Counter
 
-RESULTS_DIR = Path(__file__).resolve().parents[1] / "visualizations" / "final_pipeline_data_batch"
+RESULTS_DIR = Path(__file__).resolve().parents[1] / "outputs_data_json_batch_v2"
 
 jsons = sorted(RESULTS_DIR.glob("*_final_metrics.json"))
 print(f"Total archivos JSON: {len(jsons)}\n")

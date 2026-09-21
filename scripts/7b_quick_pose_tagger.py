@@ -3,6 +3,7 @@ import cv2
 import os
 from pathlib import Path
 import numpy as np
+import csv
 
 # Configuración de Rutas
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -50,6 +51,42 @@ drag_offset = (0, 0)
 # Drag de puntos verdes
 dragging_idx = -1       # índice del punto que se está arrastrando (-1 = ninguno)
 DRAG_RADIUS_PX = 18     # píxeles de pantalla para detectar "cerca del punto"
+
+
+def get_exam_stem_from_crop_name(name: str) -> str:
+    stem = Path(name).stem
+    return stem.replace("_Cadera_Der", "").replace("_Cadera_Izq", "") \
+               .replace("_Rodilla_Der", "").replace("_Rodilla_Izq", "") \
+               .replace("_Tobillo_Der", "").replace("_Tobillo_Izq", "")
+
+
+def load_target_list(list_path: Path, list_column: str):
+    """Carga lista de casos objetivo desde .txt (1 item por línea) o .csv."""
+    targets = set()
+    if not list_path.exists():
+        raise FileNotFoundError(f"No existe la lista: {list_path}")
+
+    if list_path.suffix.lower() == ".txt":
+        for line in list_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            item = line.strip()
+            if item:
+                targets.add(item)
+    elif list_path.suffix.lower() == ".csv":
+        with list_path.open("r", encoding="utf-8", errors="replace", newline="") as f:
+            reader = csv.DictReader(f)
+            if list_column not in reader.fieldnames:
+                raise KeyError(
+                    f"Columna '{list_column}' no encontrada en {list_path.name}. "
+                    f"Columnas disponibles: {reader.fieldnames}"
+                )
+            for row in reader:
+                item = str(row.get(list_column, "")).strip()
+                if item:
+                    targets.add(item)
+    else:
+        raise ValueError("Formato de lista no soportado. Usa .txt o .csv")
+
+    return targets
 
 def dummy_callback(val):
     pass
@@ -122,9 +159,21 @@ def run_tagger():
                         help="Confianza mínima para la predicción YOLO")
     parser.add_argument("--crop-dir", type=str, default=str(CROP_DIR),
                         help="Directorio de crops a taguear")
+    parser.add_argument("--list-file", type=str, default=None,
+                        help="Ruta a .txt o .csv con casos objetivo (opcional)")
+    parser.add_argument("--list-column", type=str, default="exam_stem",
+                        help="Columna a usar cuando --list-file es .csv")
     args = parser.parse_args()
 
     crop_dir = Path(args.crop_dir)
+
+    target_items = None
+    if args.list_file:
+        list_path = Path(args.list_file)
+        if not list_path.is_absolute():
+            list_path = BASE_DIR / list_path
+        target_items = load_target_list(list_path, args.list_column)
+        print(f"Modo lista activo: {len(target_items)} items desde {list_path}")
 
     # Cargar modelo YOLO si existe
     yolo_model = None
@@ -140,6 +189,17 @@ def run_tagger():
         print(f"[INFO] Modelo no encontrado ({model_path}). Predicción deshabilitada.")
 
     all_crops = [f for f in os.listdir(crop_dir) if f.lower().endswith(('.jpg', '.png'))]
+
+    if target_items is not None:
+        filtered = []
+        for f in all_crops:
+            stem = Path(f).stem
+            exam_stem = get_exam_stem_from_crop_name(f)
+            # Permite seleccionar por nombre de archivo, stem o exam_stem
+            if f in target_items or stem in target_items or exam_stem in target_items:
+                filtered.append(f)
+        all_crops = filtered
+
     if not all_crops:
         print(f"No hay imágenes en {crop_dir}")
         return
@@ -187,8 +247,12 @@ def run_tagger():
         else: drawing_mode = "point"
         
         while True:
-            b_val = cv2.getTrackbarPos("Brillo", "Tagueador CPAK") - 100
-            c_val = cv2.getTrackbarPos("Contraste", "Tagueador CPAK") / 100.0
+            try:
+                b_val = cv2.getTrackbarPos("Brillo", "Tagueador CPAK") - 100
+                c_val = cv2.getTrackbarPos("Contraste", "Tagueador CPAK") / 100.0
+            except cv2.error:
+                # Ventana cerrada externamente
+                break
             
             info_img = cv2.convertScaleAbs(img_resized_base, alpha=c_val, beta=b_val)
             h_disp, w_disp, _ = info_img.shape

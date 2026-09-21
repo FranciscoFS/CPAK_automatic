@@ -10,21 +10,14 @@ def force_inference():
     if not os.path.exists(MODEL_PATH):
         print("Modelo no encontrado.")
         return
-
     model = YOLO(MODEL_PATH)
     images = [f for f in os.listdir(VAL_DIR) if f.lower().endswith(('.jpg', '.png'))]
-    
     print(f"Forzando inferencia en 5 imágenes del set de validación (Confianza baja: 0.1)...")
-    
-    # Tomar 5 imágenes aleatorias
     import random
     selected = random.sample(images, min(len(images), 5))
-    
     for img_name in selected:
         print(f"Analizando: {img_name}")
         results = model.predict(VAL_DIR / img_name, conf=0.1, save=True, show=False)
-        # Esto guardará las imágenes predichas en la carpeta 'runs/detect/predict'
-        
     print("\nInferencia terminada. Revisa la carpeta 'runs/detect/predict' para ver si detecta Caderas/Rodillas.")
 
 if __name__ == "__main__":

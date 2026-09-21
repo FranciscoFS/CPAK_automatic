@@ -1,0 +1,13 @@
+# Abstract
+
+## Introducción
+La evaluación del eje coronal es indispensable para la planificación de la cirugía de rodilla. Esta se realiza mediante el cálculo manual de ángulos como el cadera-rodilla-tobillo (HKA), el ángulo lateral distal femoral mecánico (mLDFA) y el ángulo medial proximal tibial mecánico (mMPTA), habitualmente en un visualizador digital de teleradiografías de extremidades inferiores. Sin embargo, este proceso requiere tiempo y experiencia, y puede verse afectado por imprecisiones y variabilidad entre observadores. El objetivo fue desarrollar un algoritmo con inteligencia artificial (IA) para automatizar estas mediciones y evaluar su concordancia con la medición manual.
+
+## Método
+Se construyó un pipeline secuencial basado en YOLO (modelo de IA para procesamiento de imágenes). En una primera etapa, un modelo de detección localizó cadera, rodilla y tobillo en 280 TeleRx, separadas en entrenamiento (n=197), validación (n=55) y prueba (n=28). Posteriormente, un modelo de pose identificó los reparos anatómicos necesarios para calcular HKA, mLDFA y mMPTA. Este modelo se entrenó inicialmente con 943 recortes anotados y, a partir de sus pesos, se realizó un ajuste fino utilizando un conjunto ampliado de 1.734 recortes. La cohorte de concordancia, independiente del entrenamiento, incluyó 57 TeleRx. Tres observadores realizaron mediciones manuales. Se estimó el ICC con IC95% para comparar la IA con cada observador y para cuantificar la concordancia interobservador.
+
+## Resultados
+En los conjuntos de evaluación, el modelo de detección alcanzó mAP50=0,973 y mAP50-95=0,677. El modelo de pose alcanzó mAP50=0,983 y mAP50-95=0,981. El análisis de la cohorte de concordancia requirió 41,9 s para 57 TeleRx, equivalente a 0,74 s por imagen. La concordancia entre la IA y los tres observadores para HKA fue ICC=XX–XX (IC95%: XX–XX); para mLDFA, ICC=XX–XX (IC95%: XX–XX), y para mMPTA, ICC=XX–XX (IC95%: XX–XX). La concordancia interobservador manual fue ICC=XX (IC95%: XX–XX) para HKA, ICC=XX (IC95%: XX–XX) para mLDFA e ICC=XX (IC95%: XX–XX) para mMPTA.
+
+## Discusión y conclusión
+El entrenamiento secuencial y el ajuste fino progresivo permitieron obtener un alto desempeño en detección anatómica y localización de reparos, con un tiempo de procesamiento compatible con su uso operativo. La evaluación frente a tres observadores permitirá establecer si la concordancia de la IA es comparable a la variabilidad propia de la medición manual. De confirmarse los ICC esperados, el algoritmo podría constituir una herramienta objetiva y rápida de apoyo para la planificación coronal preoperatoria.

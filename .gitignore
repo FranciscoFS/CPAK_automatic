@@ -39,3 +39,27 @@ audit_report.txt
 .idea/
 .DS_Store
 Thumbs.db
+
+# Kit de despliegue (es un repositorio independiente con su propio .git)
+/deploy_app/
+/deploy_hf_space/
+
+# ---------------------------------------------------------------------------
+# DATOS DE PACIENTES — NUNCA versionar (este repositorio es PÚBLICO)
+# ---------------------------------------------------------------------------
+# Planillas de registro: contienen rut, nombre, sexo, fecha_nac, edad
+*.xlsx
+*.xls
+*.xlsm
+/reports/
+
+# Radiografías, crops y derivados de imágenes clínicas
+/current/
+/test_ptruni/
+/Outputs/
+/dataset_pose_v2/
+/MANUSCRITO/ejemplos/
+# Figuras del manuscrito derivadas de radiografías reales
+# (00_original_simple.jpg, 01_full_bboxes.jpg, tiled_crops_keypoints.jpg,
+#  crops_only/*, crops_with_keypoints/*)
+/MANUSCRITO/visualizations_abstract/
